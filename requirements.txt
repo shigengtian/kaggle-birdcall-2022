@@ -3,3 +3,7 @@ audioread
 albumentations
 soundfile
 torchlibrosa
+pandas
+timm
+tqdm
+matplotlib

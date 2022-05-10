@@ -65,7 +65,6 @@ paths = train["file_path"].values
 
 NUM_WORKERS = 16
 CLASSES = sorted(os.listdir(AUDIO_PATH))
-print(paths)
 
 for dir_ in tqdm(CLASSES):
     _ = os.makedirs('dataset/train_np/' + dir_, exist_ok=True)
