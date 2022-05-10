@@ -1,5 +1,7 @@
-dataset/
-
+*.csv
+*.ogg
+*.npy
+*.zip
 
    
 # Byte-compiled / optimized / DLL files
