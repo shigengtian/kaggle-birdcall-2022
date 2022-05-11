@@ -49,7 +49,7 @@ class CFG:
     LR = 1e-3
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
-    train_bs = 32
+    train_bs = 16 
     valid_bs = 64
     EARLY_STOPPING = 5
     DEBUG = False # True
