@@ -51,7 +51,7 @@ class CFG:
     WEIGHT_DECAY = 1e-6
     train_bs = 32
     valid_bs = 64
-    EARLY_STOPPING = True
+    EARLY_STOPPING = 5
     DEBUG = False # True
     apex = True
     pretrained = True
@@ -290,6 +290,7 @@ if __name__ == '__main__':
     min_loss = 999
     best_score = -np.inf
 
+    es = 0
     for epoch in range(args.epochs):
         print("Starting {} epoch...".format(epoch+1))
 
@@ -323,8 +324,12 @@ if __name__ == '__main__':
             print(f"other scores here... {valid_avg['f1_at_03']}, {valid_avg['f1_at_05']}")
             torch.save(model.state_dict(), f'{output_path}/fold-{fold}.bin')
             best_score = valid_avg['f1_at_03']
+            es = 0
 
-
+        else:
+            es += 1
+            if es == CFG.EARLY_STOPPING:
+                continue
     wandb.finish()
     #     model_paths = [f'fold-{i}.bin' for i in CFG.folds]
 
