@@ -2,8 +2,9 @@ torchlibrosa
 audioread
 albumentations
 soundfile
-torchlibrosa
+colorednoise
 pandas
 timm
 tqdm
 matplotlib
+transformers
