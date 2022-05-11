@@ -17,9 +17,6 @@ import ast
 import glob
 
 all_path = glob.glob('dataset/train_np/*/*.npy')
-
-
-
 train = pd.read_csv('dataset/birdclef-2022/train_metadata.csv')
 
 

@@ -1,4 +1,9 @@
 
+import argparse
+from distutils.command.config import config
+from distutils.util import strtobool
+
+from datetime import datetime
 import sys
 sys.path.append('../input/pytorch-image-models/pytorch-image-models-master')
 import colorednoise as cn
@@ -36,31 +41,19 @@ import os
 import random
 import time
 from model import TimmSED
-from utils import AverageMeter, MetricMeter, loss_fn, mixup, mixup_criterion, cutmix, cutmix_criterion 
-from datasets import WaveformDataset
+from utils import *
+import wandb
 
 class CFG:
-    ######################
-    # Globals #
-    ######################
-    EXP_ID = 'EX001'
-    seed = 42
-    epochs = 40
     cutmix_and_mixup_epochs = 18
-    folds = [0] # [0, 1, 2, 3, 4]
-    N_FOLDS = 5
     LR = 1e-3
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
-    train_bs = 16 # 32
-    valid_bs = 32 # 64
-    base_model_name = "tf_efficientnet_b0_ns"
+    train_bs = 32
+    valid_bs = 64
     EARLY_STOPPING = True
     DEBUG = False # True
-    EVALUATION = 'AUC'
     apex = True
-
-    pooling = "max"
     pretrained = True
     num_classes = 152
     in_channels = 3
@@ -96,19 +89,6 @@ class CFG:
         "fmax": 16000
     }
     
-    
-# class AudioParams:
-#     """
-#     Parameters used for the audio data
-#     """
-#     sr = CFG.sample_rate
-#     duration = CFG.period
-#     # Melspectrogram
-#     n_mels = CFG.n_mels
-#     fmin = CFG.fmin
-#     fmax = CFG.fmax
-
-
 def set_seed(seed=42):
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -214,23 +194,50 @@ def inference_fn(model, data_loader, device):
     return final_output, final_target
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--exp_no", type=int, required=True)
+    parser.add_argument("--debug", type=strtobool, default='false', required=False)
+    parser.add_argument("--fold", type=int, required=True)
+    parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--lr", type=float, required=True)
+    parser.add_argument("--output", type=str, default="./model", required=False)
+    parser.add_argument("--input", type=str, default="./", required=False)
+    # parser.add_argument("--valid_batch_size", type=int, default=8, required=False)
+    parser.add_argument("--epochs", type=int, default=40, required=False)
+
+
+    return parser.parse_args()
+
+def wandb_init(args):
+    wandb.init(
+        project='BirdCLEF_2022',
+        name=args.model,
+        notes='baseline',
+        tags=["baseline", f'exp_no_{args.exp_no}'],
+        config = config
+    )
 
 if __name__ == '__main__':
 
-    OUTPUT_DIR = f'./'
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    args = parse_args()
+    output_path = f'weights/exp_{args.exp_no}/{args.output}'
+    os.makedirs(output_path, exist_ok=True)
     
-    set_seed(CFG.seed)
+    set_seed(42)
+    wandb_init(args)
     cfg = CFG()
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     train = pd.read_csv('train_folds.csv')
 
+    if args.debug:
+        print("debug mode")
+        train=train[:50]
+        args.epochs = 10
+
     mean = (0.485, 0.456, 0.406) # RGB
     std = (0.229, 0.224, 0.225) # RGB
-
     albu_transforms = {
         'train' : A.Compose([
                 A.HorizontalFlip(p=0.5),
@@ -245,67 +252,80 @@ if __name__ == '__main__':
         ]),
     }
     
-    for fold in range(5):
-        if fold not in CFG.folds:
-            continue
-        print("=" * 100)
-        print(f"Fold {fold} Training")
-        print("=" * 100)
+    # for fold in range(5):
+    #     if fold not in CFG.folds:
+    #         continue
 
-        trn_df = train[train.kfold != fold].reset_index(drop=True)
-        val_df = train[train.kfold == fold].reset_index(drop=True)
-
-        train_dataset = WaveformDataset(trn_df, cfg, albu_transforms, mode='train')
-        train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=CFG.train_bs, num_workers=0, pin_memory=True, shuffle=True
-        )
-        
-        valid_dataset = WaveformDataset(val_df, cfg, albu_transforms, mode='valid')
-        valid_dataloader = torch.utils.data.DataLoader(
-            valid_dataset, batch_size=CFG.valid_bs, num_workers=0, pin_memory=True, shuffle=False
-        )
-
-        model = TimmSED(
-            base_model_name=CFG.base_model_name,
-            cfg=cfg,
-            pretrained=CFG.pretrained,
-            num_classes=CFG.num_classes,
-            in_channels=CFG.in_channels)
-
-        optimizer = torch.optim.AdamW(model.parameters(), lr=CFG.LR, weight_decay=CFG.WEIGHT_DECAY)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=CFG.ETA_MIN, T_max=500)
- 
-        model = model.to(device)
-
-        min_loss = 999
-        best_score = -np.inf
-
-        for epoch in range(CFG.epochs):
-            print("Starting {} epoch...".format(epoch+1))
-
-            start_time = time.time()
-
-            if epoch < CFG.cutmix_and_mixup_epochs:
-                train_avg, train_loss = train_mixup_cutmix_fn(model, train_dataloader, device, optimizer, scheduler)
-            else: 
-                train_avg, train_loss = train_fn(model, train_dataloader, device, optimizer, scheduler)
-
-            valid_avg, valid_loss = valid_fn(model, valid_dataloader, device)
-
-            elapsed = time.time() - start_time
-
-            print(f'Epoch {epoch+1} - avg_train_loss: {train_loss:.5f}  avg_val_loss: {valid_loss:.5f}  time: {elapsed:.0f}s')
-            print(f"Epoch {epoch+1} - train_f1_at_03:{train_avg['f1_at_03']:0.5f}  valid_f1_at_03:{valid_avg['f1_at_03']:0.5f}")
-            print(f"Epoch {epoch+1} - train_f1_at_05:{train_avg['f1_at_05']:0.5f}  valid_f1_at_05:{valid_avg['f1_at_05']:0.5f}")
-
-            if valid_avg['f1_at_03'] > best_score:
-                print(f">>>>>>>> Model Improved From {best_score} ----> {valid_avg['f1_at_03']}")
-                print(f"other scores here... {valid_avg['f1_at_03']}, {valid_avg['f1_at_05']}")
-                torch.save(model.state_dict(), f'fold-{fold}.bin')
-                best_score = valid_avg['f1_at_03']
+    fold = args.fold
+    print("=" * 100)
+    print(f"Fold {fold} Training")
+    print("=" * 100)
 
 
+    trn_df = train[train.kfold != fold].reset_index(drop=True)
+    val_df = train[train.kfold == fold].reset_index(drop=True)
 
+    train_dataset = WaveformDataset(trn_df, cfg, albu_transforms, mode='train')
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=CFG.train_bs, num_workers=0, pin_memory=True, shuffle=True
+    )
+    
+    valid_dataset = WaveformDataset(val_df, cfg, albu_transforms, mode='valid')
+    valid_dataloader = torch.utils.data.DataLoader(
+        valid_dataset, batch_size=CFG.valid_bs, num_workers=0, pin_memory=True, shuffle=False
+    )
+
+    model = TimmSED(
+        base_model_name=args.model,
+        cfg=cfg,
+        pretrained=CFG.pretrained,
+        num_classes=CFG.num_classes,
+        in_channels=CFG.in_channels)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=CFG.LR, weight_decay=CFG.WEIGHT_DECAY)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=CFG.ETA_MIN, T_max=500)
+
+    model = model.to(device)
+
+    min_loss = 999
+    best_score = -np.inf
+
+    for epoch in range(args.epochs):
+        print("Starting {} epoch...".format(epoch+1))
+
+        start_time = time.time()
+
+        if epoch < CFG.cutmix_and_mixup_epochs:
+            train_avg, train_loss = train_mixup_cutmix_fn(model, train_dataloader, device, optimizer, scheduler)
+        else: 
+            train_avg, train_loss = train_fn(model, train_dataloader, device, optimizer, scheduler)
+
+        valid_avg, valid_loss = valid_fn(model, valid_dataloader, device)
+
+        elapsed = time.time() - start_time
+
+        print(f'Epoch {epoch+1} - avg_train_loss: {train_loss:.5f}  avg_val_loss: {valid_loss:.5f}  time: {elapsed:.0f}s')
+        print(f"Epoch {epoch+1} - train_f1_at_03:{train_avg['f1_at_03']:0.5f}  valid_f1_at_03:{valid_avg['f1_at_03']:0.5f}")
+        print(f"Epoch {epoch+1} - train_f1_at_05:{train_avg['f1_at_05']:0.5f}  valid_f1_at_05:{valid_avg['f1_at_05']:0.5f}")
+
+
+        wandb.log({f"[fold{fold}] epoch": epoch+1, 
+                   f"[fold{fold}] avg_train_loss": train_loss, 
+                   f"[fold{fold}] avg_val_loss": valid_loss,
+                   f"[fold{fold}] train_f1_at_03": train_avg['f1_at_03'],
+                   f"[fold{fold}] valid_f1_at_03": valid_avg['f1_at_03'],
+                   f"[fold{fold}] train_f1_at_05": train_avg['f1_at_05'],
+                   f"[fold{fold}] valid_f1_at_05": valid_avg['f1_at_05'],
+                   })
+
+        if valid_avg['f1_at_03'] > best_score:
+            print(f">>>>>>>> Model Improved From {best_score} ----> {valid_avg['f1_at_03']}")
+            print(f"other scores here... {valid_avg['f1_at_03']}, {valid_avg['f1_at_05']}")
+            torch.save(model.state_dict(), f'{output_path}/fold-{fold}.bin')
+            best_score = valid_avg['f1_at_03']
+
+
+    wandb.finish()
     #     model_paths = [f'fold-{i}.bin' for i in CFG.folds]
 
     #     calc_cv(model_paths)
