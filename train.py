@@ -74,14 +74,13 @@ class CFG:
     img_size = 224 # 128
     main_metric = "epoch_f1_at_03"
 
-    period = 5
     n_mels = 224 # 128
     fmin = 20
     fmax = 16000
     n_fft = 2048
     hop_length = 512
     sample_rate = 32000
-    duration = period
+
     sr = sample_rate
     melspectrogram_parameters = {
         "n_mels": 224, # 128,
@@ -202,6 +201,7 @@ def parse_args():
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--lr", type=float, required=True)
     parser.add_argument("--output", type=str, default="./model", required=False)
+    parser.add_argument("--duration", type=int, default=5, required=False)
     parser.add_argument("--input", type=str, default="./", required=False)
     # parser.add_argument("--valid_batch_size", type=int, default=8, required=False)
     parser.add_argument("--epochs", type=int, default=40, required=False)
@@ -227,6 +227,8 @@ if __name__ == '__main__':
     set_seed(42)
     wandb_init(args)
     cfg = CFG()
+    cfg.duration = args.duration
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     train = pd.read_csv('train_folds.csv')
