@@ -330,6 +330,7 @@ if __name__ == '__main__':
 
         else:
             es += 1
+            print("score did not improved!")
             if es == CFG.EARLY_STOPPING:
                 continue
     wandb.finish()
