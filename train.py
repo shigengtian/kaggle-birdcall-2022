@@ -200,6 +200,7 @@ def parse_args():
     parser.add_argument("--fold", type=int, required=True)
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--lr", type=float, required=True)
+    parser.add_argument("--weight", type=str, required=False)
     parser.add_argument("--output", type=str, default="./model", required=False)
     parser.add_argument("--duration", type=int, default=5, required=False)
     parser.add_argument("--input", type=str, default="./", required=False)
@@ -223,7 +224,9 @@ if __name__ == '__main__':
     args = parse_args()
     output_path = f'weights/exp_{args.exp_no}/{args.output}'
     os.makedirs(output_path, exist_ok=True)
-    
+
+
+
     set_seed(42)
     wandb_init(args)
     cfg = CFG()
@@ -283,6 +286,10 @@ if __name__ == '__main__':
         pretrained=CFG.pretrained,
         num_classes=CFG.num_classes,
         in_channels=CFG.in_channels)
+
+    if args.weight is not None:
+        print("load weight")
+        model.load_state_dict(torch.load(args.weight))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=CFG.LR, weight_decay=CFG.WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=CFG.ETA_MIN, T_max=500)
