@@ -308,7 +308,6 @@ class WaveformDataset(torch.utils.data.Dataset):
                 [
                     OneOf(
                         [
-                            PitchShift(p=1),
                             NoiseInjection(p=1, max_noise_level=0.04),
                             GaussianNoise(p=1, min_snr=5, max_snr=20),
                             PinkNoise(p=1, min_snr=5, max_snr=20),
