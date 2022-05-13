@@ -213,7 +213,7 @@ def parse_args():
 def wandb_init(args):
     wandb.init(
         project='BirdCLEF_2022',
-        name=args.model,
+        name=args.model+'_exp'+str(args.exp_no),
         notes='baseline',
         tags=["baseline", f'exp_no_{args.exp_no}'],
         config = config
