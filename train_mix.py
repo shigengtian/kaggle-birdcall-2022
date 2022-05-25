@@ -45,8 +45,8 @@ from utils import *
 import wandb
 
 class CFG:
-    cutmix_and_mixup_epochs = 5
-    LR = 1e-5
+    cutmix_and_mixup_epochs = 18
+    LR = 1e-3
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
     train_bs = 16 
@@ -199,8 +199,7 @@ def parse_args():
     parser.add_argument("--debug", type=strtobool, default='false', required=False)
     parser.add_argument("--fold", type=int, required=True)
     parser.add_argument("--model", type=str, required=True)
-    # parser.add_argument("--lr", type=float, required=True)
-    parser.add_argument("--weight", type=str, required=False)
+    parser.add_argument("--lr", type=float, required=True)
     parser.add_argument("--output", type=str, default="./model", required=False)
     parser.add_argument("--duration", type=int, default=5, required=False)
     parser.add_argument("--input", type=str, default="./", required=False)
@@ -213,7 +212,7 @@ def parse_args():
 def wandb_init(args):
     wandb.init(
         project='BirdCLEF_2022',
-        name=args.model+'_exp'+str(args.exp_no),
+        name=args.model,
         notes='baseline',
         tags=["baseline", f'exp_no_{args.exp_no}'],
         config = config
@@ -224,17 +223,19 @@ if __name__ == '__main__':
     args = parse_args()
     output_path = f'weights/exp_{args.exp_no}/{args.output}'
     os.makedirs(output_path, exist_ok=True)
-
-
-
+    
     set_seed(42)
-    wandb_init(args)
+    # wandb_init(args)
+    
+
+    train = pd.read_csv('train_folds_mix.csv')
+    target_columns = train['primary_label'].unique()
+    CFG.target_columns = list(target_columns)
+    CFG.num_classes = len(target_columns)
+    CFG.duration = args.duration
+
     cfg = CFG()
-    cfg.duration = args.duration
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    train = pd.read_csv('train_folds.csv')
 
     if args.debug:
         print("debug mode")
@@ -287,10 +288,6 @@ if __name__ == '__main__':
         num_classes=CFG.num_classes,
         in_channels=CFG.in_channels)
 
-    if args.weight is not None:
-        print("load weight")
-        model.load_state_dict(torch.load(args.weight))
-
     optimizer = torch.optim.AdamW(model.parameters(), lr=CFG.LR, weight_decay=CFG.WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=CFG.ETA_MIN, T_max=500)
 
@@ -338,12 +335,10 @@ if __name__ == '__main__':
         else:
             es += 1
             print("score did not improved!")
-            print(f"other scores here... {valid_avg['f1_at_03']}, {valid_avg['f1_at_05']}")
-
             if es == CFG.EARLY_STOPPING:
-                break
-
-    wandb.finish()
+                continue
+            
+    # wandb.finish()
     #     model_paths = [f'fold-{i}.bin' for i in CFG.folds]
 
     #     calc_cv(model_paths)

@@ -8,7 +8,7 @@ sys.path.append('../input/pytorch-image-models/pytorch-image-models-master')
 import random
 import time
 import warnings
-
+import glob
 import librosa
 import numpy as np
 import pandas as pd
@@ -39,6 +39,9 @@ import matplotlib.pyplot as plt
 SR = 32000
 USE_SEC = 30 # 90 # 60
 
+
+TARGET_PATH = 'dataset/train_np_2022/'
+
 def Audio_to_Array(path):
     y, sr = sf.read(path, always_2d=True)
     y = np.mean(y, 1) # there is (X, 2) array
@@ -50,22 +53,49 @@ def Audio_to_Array(path):
     return y
 
 def save_(path):
-    save_path = "dataset/train_np/" + "/".join(path.split('/')[-2:])
+    # save_path = "dataset/train_np/" + "/".join(path.split('/')[-2:])
+    save_path = TARGET_PATH + "/".join(path.split('/')[-2:])
     np.save(save_path, Audio_to_Array(path))
 
 AUDIO_PATH = 'dataset/birdclef-2022/train_audio'
-
 train = pd.read_csv('dataset/birdclef-2022/train_metadata.csv')
 train["file_path"] = AUDIO_PATH + '/' + train['filename']
-paths = train["file_path"].values
 
-NUM_WORKERS = 16
 CLASSES = sorted(os.listdir(AUDIO_PATH))
-
+NUM_WORKERS = 23
+paths = train["file_path"].values
 for dir_ in tqdm(CLASSES):
-    _ = os.makedirs('dataset/train_np/' + dir_, exist_ok=True)
+    _ = os.makedirs(TARGET_PATH + dir_, exist_ok=True)
 _ = Parallel(n_jobs=NUM_WORKERS)(delayed(save_)(AUDIO_PATH) for AUDIO_PATH in tqdm(paths))
 
+########## 2021
 
 
 
+# TARGET_PATH = 'dataset/train_np_2021/'
+
+# def Audio_to_Array(path):
+#     y, sr = sf.read(path, always_2d=True)
+#     y = np.mean(y, 1) # there is (X, 2) array
+#     if len(y) > SR:
+#         y = y[SR:-SR]
+
+#     if len(y) > SR * USE_SEC:
+#         y = y[:SR * USE_SEC]
+#     return y
+
+# def save_(path):
+#     # save_path = "dataset/train_np/" + "/".join(path.split('/')[-2:])
+#     save_path = TARGET_PATH + "/".join(path.split('/')[-2:])
+#     np.save(save_path, Audio_to_Array(path))
+
+# AUDIO_PATH = 'dataset/birdclef-2021/train_short_audio/'
+# train = pd.read_csv('dataset/birdclef-2021/train_metadata.csv')
+# train["file_path"] = 'dataset/birdclef-2021/train_short_audio/' + train['primary_label'] + '/' + train['filename']
+
+# CLASSES = sorted(os.listdir(AUDIO_PATH))
+# NUM_WORKERS = 23
+# paths = train["file_path"].values
+# for dir_ in tqdm(CLASSES):
+#     _ = os.makedirs(TARGET_PATH + dir_, exist_ok=True)
+# _ = Parallel(n_jobs=NUM_WORKERS)(delayed(save_)(AUDIO_PATH) for AUDIO_PATH in tqdm(paths))

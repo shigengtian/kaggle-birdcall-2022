@@ -199,7 +199,7 @@ def parse_args():
     parser.add_argument("--debug", type=strtobool, default='false', required=False)
     parser.add_argument("--fold", type=int, required=True)
     parser.add_argument("--model", type=str, required=True)
-    parser.add_argument("--lr", type=float, required=True)
+    # parser.add_argument("--lr", type=float, required=True)
     parser.add_argument("--weight", type=str, required=False)
     parser.add_argument("--output", type=str, default="./model", required=False)
     parser.add_argument("--duration", type=int, default=5, required=False)
@@ -339,7 +339,7 @@ if __name__ == '__main__':
             es += 1
             print("score did not improved!")
             if es == CFG.EARLY_STOPPING:
-                continue
+                break
     wandb.finish()
     #     model_paths = [f'fold-{i}.bin' for i in CFG.folds]
 
